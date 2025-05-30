@@ -1,5 +1,6 @@
 from django_filters.rest_framework import FilterSet, filters
-from food.models import Recipe, Ingredient
+
+from food.models import Ingredient, Recipe
 
 
 class IngredientFilter(FilterSet):
@@ -7,19 +8,21 @@ class IngredientFilter(FilterSet):
 
     class Meta:
         model = Ingredient
-        fields = ("name", )
+        fields = ("name",)
 
 
 class RecipeFilter(FilterSet):
-    author = filters.NumberFilter(field_name="author")
-    is_favorited = filters.BooleanFilter(method="filter_is_favorited")
+    author = filters.NumberFilter()
+    is_favorited = filters.BooleanFilter(
+        method="filter_is_favorited"
+    )
     is_in_shopping_cart = filters.BooleanFilter(
         method="filter_is_in_shopping_cart"
     )
 
     class Meta:
         model = Recipe
-        fields = ("author", "is_favorited", "is_in_shopping_cart")
+        fields = ("author",)
 
     def filter_is_favorited(self, queryset, name, value):
         current_user = self.request.user

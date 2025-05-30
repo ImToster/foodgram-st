@@ -1,34 +1,33 @@
-from djoser.views import UserViewSet
-from django.urls import reverse
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from .serializers import (
-    UserAvatarSerializer, RecipeSerializer, RecipeShortSerializer,
-    UserWithRecipesSerializer, IngredientSerializer
-)
-from rest_framework import status, viewsets
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.exceptions import ValidationError
-from food.models import Recipe, FavoriteRecipe, Purchase, Ingredient
-from users.models import Subscription
-from django_filters.rest_framework import DjangoFilterBackend
-from .filters import RecipeFilter, IngredientFilter
-from .permissions import AuthorOrReadOnly
-from django.shortcuts import get_object_or_404
-from django.contrib.auth import get_user_model
-from .pagination import CustomPagination
-from django.http import Http404, FileResponse
-from django.db import models
 import io
-from reportlab.pdfgen import canvas
-from reportlab.pdfbase import pdfmetrics, ttfonts
-from reportlab.lib.pagesizes import A4
+
 from django.conf import settings
+from django.db import models
+from django.http import FileResponse, Http404
+from django.shortcuts import get_object_or_404
+from django.urls import reverse
+from django_filters.rest_framework import DjangoFilterBackend
+from djoser.views import UserViewSet
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfbase import pdfmetrics, ttfonts
+from reportlab.pdfgen import canvas
+from rest_framework import status, viewsets
+from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 
-font_object = ttfonts.TTFont('Arial', settings.BASE_DIR / 'fonts/arialmt.ttf')
+from food.models import FavoriteRecipe, Ingredient, Purchase, Recipe
+from users.models import Subscription, User
+
+from .filters import IngredientFilter, RecipeFilter
+from .pagination import CustomPagination
+from .permissions import AuthorOrReadOnly
+from .serializers import (IngredientSerializer, RecipeSerializer,
+                          RecipeShortSerializer, UserAvatarSerializer,
+                          UserWithRecipesSerializer)
+
+font_object = ttfonts.TTFont("Arial", settings.BASE_DIR / "fonts/arialmt.ttf")
 pdfmetrics.registerFont(font_object)
-
-User = get_user_model()
 
 
 def create_or_delete_object(
@@ -38,12 +37,10 @@ def create_or_delete_object(
     return_object,
     already_exists_message=None,
     non_exists_message=None,
-    **field_values
+    **field_values,
 ):
     if request.method == "POST":
-        created = model_class.objects.get_or_create(
-            **field_values
-        )[1]
+        _, created = model_class.objects.get_or_create(**field_values)
 
         if not created:
             raise ValidationError(already_exists_message)
@@ -64,20 +61,20 @@ class CustomUserViewSet(UserViewSet):
     pagination_class = CustomPagination
 
     def get_permissions(self):
-        if self.action == 'me':
+        if self.action == "me":
             self.permission_classes = [IsAuthenticated]
         return super().get_permissions()
 
     @action(
-        methods=['put', 'delete'],
+        methods=["put", "delete"],
         detail=False,
-        url_path='me/avatar',
+        url_path="me/avatar",
         permission_classes=(IsAuthenticated,),
         serializer_class=UserAvatarSerializer,
     )
     def avatar(self, request):
         current_user = request.user
-        if request.method == 'PUT':
+        if request.method == "PUT":
             serializer = self.get_serializer(current_user, data=request.data)
             if serializer.is_valid():
                 serializer.save()
@@ -90,7 +87,7 @@ class CustomUserViewSet(UserViewSet):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(
-        methods=['get'],
+        methods=["get"],
         detail=False,
         permission_classes=(IsAuthenticated,),
         serializer_class=UserWithRecipesSerializer,
@@ -102,7 +99,7 @@ class CustomUserViewSet(UserViewSet):
         return self.get_paginated_response(serializer.data)
 
     @action(
-        methods=['post', 'delete'],
+        methods=["post", "delete"],
         detail=True,
         permission_classes=(IsAuthenticated,),
         serializer_class=UserWithRecipesSerializer,
@@ -113,11 +110,14 @@ class CustomUserViewSet(UserViewSet):
         if current_user == author:
             raise ValidationError("Cannot subscribe to yourself.")
         return create_or_delete_object(
-            self, request, Subscription, author,
-            'You are already subscribed to this user.',
-            'You are not subscribed to this user.',
+            self,
+            request,
+            Subscription,
+            author,
+            "You are already subscribed to this user.",
+            "You are not subscribed to this user.",
             author=author,
-            subscriber=current_user
+            subscriber=current_user,
         )
 
 
@@ -125,7 +125,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
     queryset = Recipe.objects.all()
     filter_backends = (DjangoFilterBackend,)
     filterset_class = RecipeFilter
-    permission_classes = (AuthorOrReadOnly, )
+    permission_classes = (AuthorOrReadOnly,)
     serializer_class = RecipeSerializer
     pagination_class = CustomPagination
 
@@ -139,62 +139,63 @@ class RecipeViewSet(viewsets.ModelViewSet):
         current_user = request.user
 
         if request.method == "POST":
-            created = model_class.objects.get_or_create(
+            _, created = model_class.objects.get_or_create(
                 user=current_user, recipe=recipe
-            )[1]
+            )
 
             if not created:
                 raise ValidationError(already_exists_message)
 
             return Response(
-                self.get_serializer(recipe).data,
-                status=status.HTTP_201_CREATED
+                self.get_serializer(
+                    recipe).data, status=status.HTTP_201_CREATED
             )
 
-        get_object_or_404(
-            model_class, user=current_user, recipe=recipe
-        ).delete()
+        get_object_or_404(model_class, user=current_user,
+                          recipe=recipe).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(
         detail=True,
         methods=["post", "delete"],
         permission_classes=[IsAuthenticated],
-        serializer_class=RecipeShortSerializer
+        serializer_class=RecipeShortSerializer,
     )
     def favorite(self, request, pk=None):
         recipe = get_object_or_404(Recipe, pk=pk)
         current_user = request.user
         return create_or_delete_object(
-            self, request, FavoriteRecipe, recipe,
-            'Recipe already is favorited.',
-            'Recipe is not favorited.',
+            self,
+            request,
+            FavoriteRecipe,
+            recipe,
+            "Recipe already is favorited.",
+            "Recipe is not favorited.",
             user=current_user,
-            recipe=recipe
+            recipe=recipe,
         )
 
     @action(
         detail=True,
         methods=["post", "delete"],
         permission_classes=[IsAuthenticated],
-        serializer_class=RecipeShortSerializer
+        serializer_class=RecipeShortSerializer,
     )
     def shopping_cart(self, request, pk=None):
         recipe = get_object_or_404(Recipe, pk=pk)
         current_user = request.user
         return create_or_delete_object(
-            self, request, Purchase, recipe,
-            'Recipe already in shopping cart.',
-            'Recipe is not in shopping cart.',
+            self,
+            request,
+            Purchase,
+            recipe,
+            "Recipe already in shopping cart.",
+            "Recipe is not in shopping cart.",
             user=current_user,
-            recipe=recipe
+            recipe=recipe,
         )
 
-    @action(
-        detail=True,
-        methods=["get"],
-        url_path="get-link"
-    )
+    @action(detail=True, methods=["get"], url_path="get-link")
     def get_link_to_recipe(self, request, pk=None):
         if not Recipe.objects.filter(pk=pk).exists():
             raise Http404
@@ -205,12 +206,10 @@ class RecipeViewSet(viewsets.ModelViewSet):
                     reverse("food:short-link-to-recipe", args=[pk])
                 )
             },
-            status=status.HTTP_200_OK
+            status=status.HTTP_200_OK,
         )
 
-    @action(
-        detail=False, permission_classes=[IsAuthenticated], methods=["get"]
-    )
+    @action(detail=False, permission_classes=[IsAuthenticated], methods=["get"])
     def download_shopping_cart(self, request):
         recipes = request.user.purchased_recipes
         if not recipes.exists():
@@ -218,28 +217,27 @@ class RecipeViewSet(viewsets.ModelViewSet):
 
         ingredients = recipes.values(
             "ingredients__name", "ingredients__measurement_unit"
-        ).annotate(
-            total_amount=models.Sum("ingredient_recipes__amount")
-        )
+        ).annotate(total_amount=models.Sum("ingredient_recipes__amount"))
 
         buffer = io.BytesIO()
         p = canvas.Canvas(buffer, bottomup=0, pagesize=A4)
         height = A4[1]
-        p.setFont('Arial', 14)
+        p.setFont("Arial", 14)
         y = 50
         p.drawString(50, y, "Список ингредиентов:")
         y += 20
         for i, ingredient in enumerate(ingredients, 1):
             p.drawString(
-                70, y,
+                70,
+                y,
                 f"{i}. {ingredient['ingredients__name']}"
                 f" ({ingredient['ingredients__measurement_unit']})"
-                f" - {ingredient['total_amount']}"
+                f" - {ingredient['total_amount']}",
             )
             y += 20
             if y > height - 50:
                 p.showPage()
-                p.setFont('Arial', 14)
+                p.setFont("Arial", 14)
                 y = 50
 
         p.showPage()
@@ -247,7 +245,8 @@ class RecipeViewSet(viewsets.ModelViewSet):
 
         buffer.seek(0)
         return FileResponse(
-            buffer, as_attachment=True,
+            buffer,
+            as_attachment=True,
             filename="shopping_cart.pdf",
         )
 

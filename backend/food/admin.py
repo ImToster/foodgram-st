@@ -1,12 +1,7 @@
 from django.contrib import admin
 
-from .models import (
-    Ingredient,
-    Recipe,
-    IngredientRecipe,
-    FavoriteRecipe,
-    Purchase,
-)
+from .models import (FavoriteRecipe, Ingredient, IngredientRecipe, Purchase,
+                     Recipe)
 
 
 @admin.register(Recipe)
@@ -19,9 +14,9 @@ class RecipeAdmin(admin.ModelAdmin):
         "author__username",
         "author__first_name",
         "author__last_name",
-        "name"
+        "name",
     )
-    readonly_fields = ('lovers_count', )
+    readonly_fields = ("lovers_count",)
 
     @admin.display(description="Добавления в изобранное")
     def lovers_count(self, obj):
@@ -39,11 +34,7 @@ class IngredientAdmin(admin.ModelAdmin):
 
 @admin.register(IngredientRecipe)
 class IngredientRecipeAdmin(admin.ModelAdmin):
-    list_display = (
-        "ingredient",
-        "recipe",
-        "amount"
-    )
+    list_display = ("ingredient", "recipe", "amount")
 
 
 @admin.register(FavoriteRecipe)
